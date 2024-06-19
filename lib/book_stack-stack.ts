@@ -36,6 +36,11 @@ export class BookStack extends cdk.Stack {
 
     const awsAccountNumber = ssm.StringParameter.valueFromLookup(this, '/all/awsAccountNumber');
     const domainHostedZoneId = ssm.StringParameter.valueFromLookup(this, '/all/aws/route53/wmaug.org/hostedZoneId');
+    let SecretParamPath = `/${stackEnvironment}/BookStack/DB_PASS`;
+    const SecretParam = {'DB_PASS': ssm.StringParameter.fromSecureStringParameterAttributes(this, 'DB_PASSParameter', {
+        parameterName: SecretParamPath,
+        version: 1,
+      })};
 
     const vpc = ec2.Vpc.fromLookup(this, 'VPC', {
       vpcName: `${stackEnvironment}Vpc`,
@@ -60,6 +65,12 @@ export class BookStack extends cdk.Stack {
       effect: iam.Effect.ALLOW,
       actions: ['sts:AssumeRole'],
       resources: [`arn:aws:iam::${awsAccountNumber}:*`],
+    }));
+
+    fargateTaskDefinition.addToExecutionRolePolicy(new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['ssm:GetParameter'],
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${SecretParamPath}`],
     }));
 
     const securityGroup = new ec2.SecurityGroup(this, 'SecurityGroup', {
@@ -112,10 +123,6 @@ export class BookStack extends cdk.Stack {
     fargateTaskDefinition.defaultContainer?.addEnvironment('TZ', 'Etc/UTC');
     fargateTaskDefinition.defaultContainer?.addEnvironment('DB_DATABASE', `${id}Rds`);
     fargateTaskDefinition.defaultContainer?.addEnvironment('APP_URL', appFullUrl);
-    const SecretParam = {'DB_PASS': ssm.StringParameter.fromSecureStringParameterAttributes(this, 'DB_PASSParameter', {
-        parameterName: `/${stackEnvironment}/BookStack/DB_PASS`,
-        version: 1,
-        })};
     fargateTaskDefinition.defaultContainer?.addSecret('DB_PASS', ecs.Secret.fromSsmParameter(SecretParam['DB_PASS']));
 
 
