@@ -1,24 +1,31 @@
 import * as cdk from 'aws-cdk-lib';
+import {aws_route53_targets, SecretValue} from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
-import elbv2 = require('aws-cdk-lib/aws-elasticloadbalancingv2');
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as aws_rds from 'aws-cdk-lib/aws-rds';
-import { Construct } from 'constructs';
-import {aws_route53_targets} from "aws-cdk-lib";
+import * as aws_secrets from 'aws-cdk-lib/aws-secretsmanager'
+import {Construct} from 'constructs';
+import {ApplicationProtocol} from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import elbv2 = require('aws-cdk-lib/aws-elasticloadbalancingv2');
 
 export class BookStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: { env: { account: any, region: string, awsEnvironment: string }, }) {
     super(scope, id, props);
 
     const stackEnvironment: string | undefined = props?.env.awsEnvironment;
+    const dbUsername: string | undefined = `${id}RdsAdmin`
+    const dbDatabase: string | undefined = `${id}Rds`
 
     let appUrl: string;
     let appFullUrl: string;
+//    let customResource: AwsCustomResource
+//    let fnCode: lambda.DockerImageCode
+//    let response: string;
 
     if (stackEnvironment == "productionA") {
       appUrl = 'docs.wmaug.org'
@@ -39,8 +46,19 @@ export class BookStack extends cdk.Stack {
     let SecretParamPath = `/${stackEnvironment}/BookStack/DB_PASS`;
     const SecretParam = {'DB_PASS': ssm.StringParameter.fromSecureStringParameterAttributes(this, 'DB_PASSParameter', {
         parameterName: SecretParamPath,
-        version: 1,
+        version: 2,
       })};
+
+    const user = new iam.User(this, 'User');
+    const accessKey = new iam.AccessKey(this, 'AccessKey', { user });
+
+    const rdsSecret = new aws_secrets.Secret(this, 'rdsSecret', {
+      secretObjectValue: {
+        username: SecretValue.unsafePlainText(dbUsername),
+        database: SecretValue.unsafePlainText(dbDatabase),
+        password: accessKey.secretAccessKey,
+      },
+    })
 
     const vpc = ec2.Vpc.fromLookup(this, 'VPC', {
       vpcName: `${stackEnvironment}Vpc`,
@@ -99,13 +117,14 @@ export class BookStack extends cdk.Stack {
 
     const BookStackRds = new aws_rds.DatabaseInstance(this, 'BookStackRds', {
       engine: aws_rds.DatabaseInstanceEngine.mysql({ version: aws_rds.MysqlEngineVersion.VER_8_0 }),
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.BURSTABLE3, ec2.InstanceSize.MICRO),
+      credentials: aws_rds.Credentials.fromSecret(rdsSecret),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.MICRO),
       vpc,
       vpcSubnets: {
         subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
       },
       securityGroups: [securityGroup],
-      databaseName: `${id}Rds`,
+      databaseName: dbDatabase,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       deletionProtection: false,
       allocatedStorage: 20,
@@ -114,16 +133,70 @@ export class BookStack extends cdk.Stack {
       multiAz: false,
       autoMinorVersionUpgrade: true,
     });
+//
+//
+//    const ResourceInitializerFn = new lambda.DockerImageFunction(this, 'ResourceInitializerFn', {
+//      memorySize: 128,
+//      functionName: `${id}ResourceInitializerFn`,
+//      code: fnCode,
+//      vpcSubnets: {
+//        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+//      },
+//      vpc: vpc,
+//      securityGroups: [securityGroup],
+//      timeout: cdk.Duration.minutes(5),
+//      logRetention: RetentionDays.ONE_DAY,
+//      allowAllOutbound: true
+//    })
+//
+//    const payload: string = JSON.stringify({
+//      params: {
+//        config: props.config
+//      }
+//    })
+//
+//    const payloadHashPrefix = createHash('md5').update(payload).digest('hex').substring(0, 6)
+//
+//    const sdkCall: AwsSdkCall = {
+//      service: 'Lambda',
+//      action: 'invoke',
+//      parameters: {
+//        FunctionName: ResourceInitializerFn.functionName,
+//        Payload: payload
+//      },
+//      physicalResourceId: PhysicalResourceId.of(`${id}-AwsSdkCall-${ResourceInitializerFn.currentVersion.version + payloadHashPrefix}`)
+//    }
+//
+//    const customResourceFnRole = new Role(this, 'AwsCustomResourceRole', {
+//      assumedBy: new ServicePrincipal('lambda.amazonaws.com')
+//    })
+//    customResourceFnRole.addToPolicy(
+//        new PolicyStatement({
+//          resources: [`arn:aws:lambda:${this.region}:${this.account}:function:*-ResInit${this.stackName}`],
+//          actions: ['lambda:InvokeFunction']
+//        })
+//    )
+//    customResource = new AwsCustomResource(this, 'AwsCustomResource', {
+//      policy: AwsCustomResourcePolicy.fromSdkCalls({ resources: AwsCustomResourcePolicy.ANY_RESOURCE }),
+//      onUpdate: sdkCall,
+//      timeout: Duration.minutes(10),
+//      role: customResourceFnRole
+//    })
+
+    // response = customResource.getResponseField('Payload')
+
+    // function = ResourceInitializerFn
 
     // Export the RDS endpoints
     new cdk.CfnOutput(this, 'RDS Endpoint', { value: BookStackRds.dbInstanceEndpointAddress, });
     // apply endpoint as environment variable to task definition
     fargateTaskDefinition.defaultContainer?.addEnvironment('DB_HOST', BookStackRds.dbInstanceEndpointAddress);
     fargateTaskDefinition.defaultContainer?.addEnvironment('DB_PORT', '3306');
-    fargateTaskDefinition.defaultContainer?.addEnvironment('TZ', 'Etc/UTC');
-    fargateTaskDefinition.defaultContainer?.addEnvironment('DB_DATABASE', `${id}Rds`);
-    fargateTaskDefinition.defaultContainer?.addEnvironment('APP_URL', appFullUrl);
+    fargateTaskDefinition.defaultContainer?.addEnvironment('DB_USER', dbUsername);
     fargateTaskDefinition.defaultContainer?.addSecret('DB_PASS', ecs.Secret.fromSsmParameter(SecretParam['DB_PASS']));
+    fargateTaskDefinition.defaultContainer?.addEnvironment('DB_DATABASE', dbDatabase);
+    fargateTaskDefinition.defaultContainer?.addEnvironment('TZ', 'Etc/UTC');
+    fargateTaskDefinition.defaultContainer?.addEnvironment('APP_URL', appFullUrl);
 
 
     // Add an Elastic File System volume to the task definition
@@ -197,7 +270,8 @@ export class BookStack extends cdk.Stack {
     });
 
     httpsListener.addTargets('ECS', {
-      port: 443,
+      port: 6875,
+      protocol: ApplicationProtocol.HTTP,
       healthCheck: {
         path: "/",
         interval: cdk.Duration.seconds(30),

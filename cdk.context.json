@@ -44,5 +44,49 @@
       }
     ]
   },
-  "ssm:account=590183969109:parameterName=/all/aws/route53/wmaug.org/hostedZoneId:region=us-east-2": "Z100970737MQL35T76U"
+  "ssm:account=590183969109:parameterName=/all/aws/route53/wmaug.org/hostedZoneId:region=us-east-2": "Z100970737MQL35T76U",
+  "vpc-provider:account=590183969109:filter.tag:Name=devAVpc:region=us-east-2:returnAsymmetricSubnets=true": {
+    "vpcId": "vpc-0cb1ecd2b290d16c5",
+    "vpcCidrBlock": "10.0.0.0/16",
+    "ownerAccountId": "590183969109",
+    "availabilityZones": [],
+    "subnetGroups": [
+      {
+        "name": "Public",
+        "type": "Public",
+        "subnets": [
+          {
+            "subnetId": "subnet-03a886474404dd5e0",
+            "cidr": "10.0.0.0/18",
+            "availabilityZone": "us-east-2a",
+            "routeTableId": "rtb-09757afcc35cabed1"
+          },
+          {
+            "subnetId": "subnet-01baefcf3f1869d59",
+            "cidr": "10.0.64.0/18",
+            "availabilityZone": "us-east-2b",
+            "routeTableId": "rtb-03d0b614905edb3a0"
+          }
+        ]
+      },
+      {
+        "name": "Private",
+        "type": "Private",
+        "subnets": [
+          {
+            "subnetId": "subnet-05bac5a182f364871",
+            "cidr": "10.0.128.0/18",
+            "availabilityZone": "us-east-2a",
+            "routeTableId": "rtb-0cdf7ed93c3aa5751"
+          },
+          {
+            "subnetId": "subnet-0b5daca03ed6c992e",
+            "cidr": "10.0.192.0/18",
+            "availabilityZone": "us-east-2b",
+            "routeTableId": "rtb-08edb88dc9e1f1120"
+          }
+        ]
+      }
+    ]
+  }
 }
