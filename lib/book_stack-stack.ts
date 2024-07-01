@@ -76,8 +76,21 @@ export class BookStack extends cdk.Stack {
 
     fargateTaskDefinition.addContainer(`${id}Container`, {
       image: ecs.ContainerImage.fromRegistry("lscr.io/linuxserver/bookstack:latest"),
-      portMappings: [{ containerPort: 6875 }],
+      portMappings: [{ containerPort: 80 }],
+      logging: ecs.LogDrivers.awsLogs({ streamPrefix: `${id}-container`,
+        logRetention: 1 }),
     });
+
+    // add firelense container
+    fargateTaskDefinition.addContainer('firelense', {
+      image: ecs.ContainerImage.fromRegistry("amazon/aws-for-fluent-bit:latest"),
+      essential: false,
+      logging: ecs.LogDrivers.awsLogs({
+          streamPrefix: `${id}-firelense`,
+          logRetention: 1,
+          }),
+      });
+
 
     fargateTaskDefinition.addToTaskRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -270,7 +283,7 @@ export class BookStack extends cdk.Stack {
     });
 
     httpsListener.addTargets('ECS', {
-      port: 6875,
+      port: 80,
       protocol: ApplicationProtocol.HTTP,
       healthCheck: {
         path: "/",
