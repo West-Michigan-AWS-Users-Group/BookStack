@@ -88,8 +88,8 @@ export class BookStack extends cdk.Stack {
       this,
       "TaskDef",
       {
-        memoryLimitMiB: 1024,
-        cpu: 512,
+        memoryLimitMiB: 512,
+        cpu: 256,
       },
     );
 
@@ -147,13 +147,13 @@ export class BookStack extends cdk.Stack {
     );
 
     securityGroup.addIngressRule(
-      ec2.Peer.ipv4("98.243.157.138/32"),
+      ec2.Peer.ipv4("0.0.0.0/0"),
       ec2.Port.tcp(80),
       "Allow HTTP traffic",
     );
 
     securityGroup.addIngressRule(
-      ec2.Peer.ipv4("98.243.157.138/32"),
+      ec2.Peer.ipv4("0.0.0.0/0"),
       ec2.Port.tcp(443),
       "Allow HTTPS traffic",
     );
